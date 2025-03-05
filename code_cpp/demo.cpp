@@ -4,6 +4,83 @@ While these projects cant paint a full example, I hope it can
 demonstrate my prefered approaches to scenarios within python.
 """
 
+// Base class for rendering objects
+class Renderable {
+public:
+    virtual void draw() const = 0; // Virtual function for drawing
+    virtual ~Renderable() {}
+};
+
+// Cube class
+class Cube : public Renderable {
+private:
+    float vertices[72];
+    unsigned int indices[36];
+
+public:
+    Cube() {
+        // Define vertices for a cube
+        float* heapVertices = new float[72]{
+            // Front face
+           -0.5f, -0.5f,  0.5f,  // Bottom-left
+            0.5f, -0.5f,  0.5f,  // Bottom-right
+            0.5f,  0.5f,  0.5f,  // Top-right
+           -0.5f,  0.5f,  0.5f,  // Top-left
+
+            // Back face
+           -0.5f, -0.5f, -0.5f,  // Bottom-left
+            0.5f, -0.5f, -0.5f,  // Bottom-right
+            0.5f,  0.5f, -0.5f,  // Top-right
+           -0.5f,  0.5f, -0.5f,  // Top-left
+        };
+
+        // Copy vertices to the member array
+        std::copy(heapVertices, heapVertices + 72, vertices);
+        delete[] heapVertices; // Clean up heap memory
+
+        // Define indices for the cube
+        unsigned int tempIndices[36] = {
+            // Front face
+            0, 1, 2,  2, 3, 0,
+            // Back face
+            4, 5, 6,  6, 7, 4,
+            // Left face
+            0, 4, 7,  7, 3, 0,
+            // Right face
+            1, 5, 6,  6, 2, 1,
+            // Top face
+            3, 7, 6,  6, 2, 3,
+            // Bottom face
+            0, 1, 5,  5, 4, 0
+        };
+
+        std::copy(tempIndices, tempIndices + 36, indices);
+    }
+
+    void draw() const override {
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glVertexPointer(3, GL_FLOAT, 0, vertices);
+
+        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, indices);
+
+        glDisableClientState(GL_VERTEX_ARRAY);
+    }
+};
+
+std::atomic<float> rotationAngle = 0.0f; // Shared rotation angle
+
+// Function to update the rotation angle in a separate thread
+void updateRotation() {
+    while (true) {
+        rotationAngle += 0.01f;
+        if (rotationAngle > 360.0f)
+            rotationAngle = 0.0f;
+        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
+    }
+}
+
+
+
 using namespace std; 
 
 class twoDArray{
@@ -94,52 +171,3 @@ void twoDArray::printArrays(){
             cout << endl; 
         }
     }
-
-
-
-#include <iostream>
-using namespace std; 
-
-struct Node{
-    int value; 
-    Node* link;
-};
-
-Node* addNode(Node* first);
-void printList(Node* first); 
-
-int main(){
-    Node* root = nullptr; 
-    root = addNode(root); 
-    printList(root);
-
-    return 0; 
-}
-
-Node* addNode(Node* first){
-    Node* newNode, *last; 
-    int val; 
-    cout << "Enter a number: "; cin >> val;
-    while(val != 0){
-        newNode = new Node; 
-        newNode->value = val;
-        newNode->link = nullptr;
-        if(first == nullptr){
-            first = newNode; 
-            last = newNode;
-        }
-        else{
-            last->link = newNode; 
-            last = newNode; 
-        }
-        cin >> val; 
-    }
-    return first; 
-}
-void printList(Node* first){
-    Node* curr = first; 
-    while(curr != nullptr){
-        cout << curr->value << " "; 
-        curr = curr->link; 
-    }
-}
