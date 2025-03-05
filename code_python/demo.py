@@ -335,12 +335,3 @@ class app_tracker_ui(QtWidgets.QWidget):
         self.tracker.save_to_file()
         self.url_input.clear()
 
-
-# ===========================
-# Main Execution
-# ===========================
-if __name__ == '__main__': 
-    app = QtWidgets.QApplication([])
-    widget = app_tracker_ui() 
-    widget.show()
-    sys.exit(app.exec())
