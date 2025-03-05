@@ -8,6 +8,9 @@ demonstrate my prefered approaches to scenarios within python.
 
 
 #-----------------------------------------
+"""
+Convert shaders to Lambert shaders 
+"""
 import os
 import re
 import logging
