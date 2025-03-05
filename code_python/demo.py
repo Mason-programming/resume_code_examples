@@ -7,6 +7,7 @@ demonstrate my prefered approaches to scenarios within python.
 
 
 
+
 #-----------------------------------------
 """
 Convert shaders to Lambert shaders 
@@ -15,70 +16,74 @@ import os
 import re
 import logging
 
+import maya.cmds as cmds
 from pxr import Usd, UsdGeom, UsdShade, Sdf, Gf
 
 
 def gather_mesh_and_ptex_paths(usd_stage_path):
     """
-    Gathers selected meshes from a USD Stage and finds corresponding ptex files.
-    If a ptex file is not found, assigns a grey material.
+    Gathers selected meshes in Maya and their corresponding ptex files.
+    Uses USD to extract mesh names and find ptex paths.
+    If a ptex file is not found, assigns a grey Lambert material.
     """
-    logging.info("Processing USD stage: %s", usd_stage_path)
+    logging.info("Processing USD Stage: %s", usd_stage_path)
 
     pattern = r"[0-9]"
     mesh_and_ptex_paths = {}
 
-    # Open USD stage
+    # Load the USD Stage
     stage = Usd.Stage.Open(usd_stage_path)
     if not stage:
         logging.error("Failed to open USD stage.")
         return {}
 
-    # Get all mesh prims that end with "_geo"
-    mesh_prims = [
-        prim for prim in stage.Traverse() if prim.IsA(UsdGeom.Mesh) and prim.GetName().endswith("_geo")
-    ]
+    # Get selected Maya meshes
+    selected_meshes = [mesh for mesh in cmds.ls(sl=True, dag=True) or [] if mesh.endswith("_geo")]
 
-    if not mesh_prims:
-        logging.warning("No valid meshes found in the USD scene.")
+    if not selected_meshes:
+        logging.warning("No valid geometry selected in Maya.")
         return {}
 
-    for mesh_prim in mesh_prims:
-        mesh_name = mesh_prim.GetName()
-        element_name = re.sub(pattern, "", mesh_name)  # Remove numbers
-        ptex_path = f"/textures/{element_name}/{mesh_name}.ptx"  # Example ptex path logic
+    for selected_mesh in selected_meshes:
+        mesh_prim = stage.GetPrimAtPath(f"/Meshes/{selected_mesh}")
+        if not mesh_prim or not mesh_prim.IsA(UsdGeom.Mesh):
+            logging.warning(f"Mesh {selected_mesh} not found in USD stage.")
+            continue
+
+        # Remove numerical suffix
+        element_name = re.sub(pattern, "", selected_mesh)
+
+        # Construct PTex path
+        ptex_path = f"/textures/{element_name}/{selected_mesh}.ptx"
 
         if os.path.exists(ptex_path):
-            mesh_and_ptex_paths[mesh_name] = ptex_path
+            mesh_and_ptex_paths[selected_mesh] = ptex_path
         else:
-            logging.warning(f"Ptex not found for {mesh_name}. Assigning grey material.")
-            assign_grey_material(stage, mesh_prim)
+            logging.warning(f"Ptex not found for {selected_mesh}. Assigning grey Lambert.")
+            create_grey_lambert_shader(selected_mesh)
 
     return mesh_and_ptex_paths
 
 
-def assign_grey_material(stage, mesh_prim):
+def create_grey_lambert_shader(mesh_name):
     """
-    Assigns a grey USD Lambert-like material to a mesh prim.
+    Creates and assigns a grey Lambert shader in Maya.
     """
-    material_path = f"/Materials/{mesh_prim.GetName()}_greyMat"
-    material = UsdShade.Material.Define(stage, material_path)
-    shader = UsdShade.Shader.Define(stage, material_path + "/Shader")
+    shader_name = f"{mesh_name}_grey_lambert"
+    lambert_shader = cmds.shadingNode("lambert", name=shader_name, asShader=True)
+    shader_group = cmds.sets(name=f"{shader_name}SG", renderable=True, empty=True, noSurfaceShader=True)
 
-    shader.CreateIdAttr("UsdPreviewSurface")
-    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.5, 0.5, 0.5))
-    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.5)
-
-    material.CreateSurfaceOutput("mdl").ConnectToSource(shader, "outputs:surface")
-
-    UsdShade.MaterialBindingAPI(mesh_prim).Bind(material)
+    cmds.connectAttr(f"{lambert_shader}.outColor", f"{shader_group}.surfaceShader")
+    cmds.setAttr(f"{lambert_shader}.color", 0.5, 0.5, 0.5, type="double3")
+    cmds.sets(mesh_name, forceElement=shader_group)
 
 
 def process_ptex_data(mesh_data):
     """
-    Process ptex data for selected meshes and extracts color values.
+    Processes PTex data and assigns materials based on extracted colors.
     """
     rgb_values = {}
+
     for mesh, ptex_path in mesh_data.items():
         color_value = extract_ptex_color(ptex_path)
         converted_color = convert_pixel_to_display_color(color_value)
@@ -93,38 +98,33 @@ def process_ptex_data(mesh_data):
 
 def extract_ptex_color(ptex_path):
     """
-    Simulated ptex color extraction. Returns a solid color (0.8, 0.6, 0.4) for now.
+    Simulates PTex color extraction. (Placeholder value for now).
     """
-    return (0.8, 0.6, 0.4)  # Placeholder color
+    return (0.8, 0.6, 0.4)  # Simulated solid color
 
 
 def convert_pixel_to_display_color(pixel_value):
     """
-    Converts pixel value to display color.
+    Converts a PTex pixel value to display color using gamma correction.
     """
     gamma = 2.2
-    converted_pixel = [pow(channel / 255.0, gamma) for channel in pixel_value]
-    return tuple(converted_pixel)
+    return tuple(pow(channel / 255.0, gamma) for channel in pixel_value)
 
 
-def create_lambert_shader(stage, shader_name, rgb_values):
+def create_lambert_shader(shader_name, rgb_values):
     """
-    Creates USD Lambert shaders based on RGB values and assigns them.
+    Creates and assigns Lambert shaders based on extracted PTex colors.
     """
-    for rgb_tuple, mesh_names in rgb_values.items():
-        material_path = f"/Materials/{shader_name}"
-        material = UsdShade.Material.Define(stage, material_path)
-        shader = UsdShade.Shader.Define(stage, material_path + "/Shader")
+    for rgb_tuple, meshes in rgb_values.items():
+        color_values = list(rgb_tuple)
+        cmds.select(meshes, r=True)
 
-        shader.CreateIdAttr("UsdPreviewSurface")
-        shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*rgb_tuple))
-        shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.5)
+        # Create Lambert Shader
+        lambert_shader = cmds.shadingNode("lambert", name=shader_name, asShader=True)
+        shader_group = cmds.sets(name=f"{shader_name}SG", renderable=True, empty=True, noSurfaceShader=True)
 
-        material.CreateSurfaceOutput("mdl").ConnectToSource(shader, "outputs:surface")
-
-        for mesh_name in mesh_names:
-            mesh_prim = stage.GetPrimAtPath(f"/Meshes/{mesh_name}")
-            if mesh_prim:
-                UsdShade.MaterialBindingAPI(mesh_prim).Bind(material)
+        cmds.connectAttr(f"{lambert_shader}.outColor", f"{shader_group}.surfaceShader")
+        cmds.setAttr(f"{lambert_shader}.color", color_values[0], color_values[1], color_values[2], type="double3")
+        cmds.sets(meshes, forceElement=shader_group)
 
 #-----------------------        
