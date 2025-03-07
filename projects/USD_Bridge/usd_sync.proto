@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+service USDSync {
+  rpc SendUSDUpdate (USDUpdateRequest) returns (USDUpdateResponse);
+  rpc WatchUSDUpdates (WatchRequest) returns (stream USDUpdateResponse);
+}
+
+message USDUpdateRequest {
+  string usd_file_path = 1;
+}
+
+message USDUpdateResponse {
+  string message = 1;
+}
+
+message WatchRequest {}
