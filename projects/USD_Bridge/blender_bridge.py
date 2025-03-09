@@ -32,17 +32,28 @@ class BlenderUSDService:
                         return True
         return False 
     
-    def get_current(self, source): 
+    def get_current_usd(self, source): 
         
         if is_usd_loaded(): 
-            pass 
+
+            match source: 
+
+                case 'unreal': 
+                
+                case 'unity': 
+                
+                case 'maya': 
+                
+                case 'cad': 
+
+            self.sendUSDUpdate( source)
 
         else: 
             bpy.ops.wm.usd_import(filepath=usd_file)  # Load USD in Blender
-
-
-    def conform_animation(self): 
+            
+    def send_usd(self): 
         pass 
+        
 
 if __name__ == "__main__":
     serve()
