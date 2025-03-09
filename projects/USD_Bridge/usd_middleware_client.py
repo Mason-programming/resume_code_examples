@@ -1,7 +1,9 @@
 import grpc
-import usd_middleware_pb2
-import usd_middleware_pb2_grpc
+import usd_sync_pb2
+import usd_sync_pb2_grpc
 import bpy  # For Blender (Modify for other DCCs)
+
+
 
 class USDClient:
     def __init__(self, dcc_name):
