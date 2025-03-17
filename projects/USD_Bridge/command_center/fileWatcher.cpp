@@ -28,7 +28,11 @@ std::string UpdateListener::whatToWatch(std::unordered_map<std::string, efsw::Wa
     // Choose a OS to watch 
     switch (os){ 
 
-        case 
+        case windows: 
+            efsw::WatchID watchID3 = fileWatcher->addWatch( "c:\\temp", listener, true, { (BufferSize, 128*1024) } );
+            break; 
+        case darwin: 
+
 
 
     }
@@ -41,3 +45,22 @@ std::string UpdateListener::whatToWatch(std::unordered_map<std::string, efsw::Wa
 }; 
 
 
+reindexing(const std::string& filename){
+
+    efsw::WatchID& tempWatch; 
+
+    int i = 0 
+
+
+    for(int i = 0; ){
+
+        if filename == filesToWatch[i]{
+            tempWatch = filesToWatch[i]
+
+        }
+
+        i++; 
+    }
+
+    return filesToWatch; 
+}

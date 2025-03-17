@@ -26,6 +26,7 @@ class UpdateListener : public efsw::FileWatchListener {
                 std::cout << "DIR (" << dir << ") FILE (" << filename << ") has event Modified"
                           << std::endl;
                 
+                reindexing(filname)
 
                 break;
             case efsw::Actions::Moved:

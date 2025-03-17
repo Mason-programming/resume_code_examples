@@ -5,127 +5,113 @@ demonstrate my prefered approaches to scenarios within python.
 """
 
 
-
-
-
-#-----------------------------------------
 """
-Convert shaders to Lambert shaders 
+This Python script serves as a custom launcher for Blender that allows a user to pass in a USD file
+and automatically open Blender with the appropriate environment settings. It also executes a custom
+script (run_in_blender.py) inside Blender.
 """
+
 import os
-import re
-import logging
+import sys
+import subprocess
+from pathlib import Path
 
-import maya.cmds as cmds
-from pxr import Usd, UsdGeom, UsdShade, Sdf, Gf
+# Add source directory to PYTHONPATH
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent
+src_path = project_root / "src"
+sys.path.insert(0, str(src_path))
 
+from dcc_commands.commands import Commands  # Base class
 
-def gather_mesh_and_ptex_paths(usd_stage_path):
-    """
-    Gathers selected meshes in Maya and their corresponding ptex files.
-    Uses USD to extract mesh names and find ptex paths.
-    If a ptex file is not found, assigns a grey Lambert material.
-    """
-    logging.info("Processing USD Stage: %s", usd_stage_path)
+class BlenderLauncher(Commands):
+    def __init__(self):
+        super().__init__()
+        self.blender_path = "/Applications/Blender.app/Contents/MacOS/Blender"
+        self.bridge_script = project_root / "src/bridge_scripts/run_in_blender.py"
 
-    pattern = r"[0-9]"
-    mesh_and_ptex_paths = {}
+    def configure_env(self):
+        """Set Blender-specific environment variables."""
+        os.environ["BLENDER_USE_USD"] = "1"
+        if self.usd_file:
+            os.environ["USD_FILE_PATH"] = self.usd_file
+            print(f"🔗 Set USD_FILE_PATH to {self.usd_file}")
 
-    # Load the USD Stage
-    stage = Usd.Stage.Open(usd_stage_path)
-    if not stage:
-        logging.error("Failed to open USD stage.")
-        return {}
+    def launch(self):
+        """Launch Blender in detached mode with the bridge script."""
+        command = [
+            self.blender_path,
+            "--python", str(self.bridge_script)
+        ]
 
-    # Get selected Maya meshes
-    selected_meshes = [mesh for mesh in cmds.ls(sl=True, dag=True) or [] if mesh.endswith("_geo")]
+        try:
+            subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            print(f"🚀 Blender launched with script: {self.bridge_script.name}")
+        except Exception as e:
+            print(f"❌ Failed to launch Blender: {e}")
 
-    if not selected_meshes:
-        logging.warning("No valid geometry selected in Maya.")
-        return {}
+if __name__ == "__main__":
+    launcher = BlenderLauncher()
+    launcher.base_env()              # Load core pipeline envs
+    launcher.configure_env()         # Set Blender-specific envs
+    launcher.launch()                # Run Blender
+    if launcher.usd_file:
+        launcher.save_usd_path()     # Cache for "resume session" feature
 
-    for selected_mesh in selected_meshes:
-        mesh_prim = stage.GetPrimAtPath(f"/Meshes/{selected_mesh}")
-        if not mesh_prim or not mesh_prim.IsA(UsdGeom.Mesh):
-            logging.warning(f"Mesh {selected_mesh} not found in USD stage.")
-            continue
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+import pwd
 
-        # Remove numerical suffix
-        element_name = re.sub(pattern, "", selected_mesh)
+# Base class for shared utilities
+class Commands:
+    
+    def __init__(self):
+        self.username = pwd.getpwuid(os.getuid()).pw_name
+        self.usd_file = self.parse_args()
 
-        # Construct PTex path
-        ptex_path = f"/textures/{element_name}/{selected_mesh}.ptx"
+    def parse_args(self):
+        if len(sys.argv) > 1:
+            usd_scene = sys.argv[1]
 
-        if os.path.exists(ptex_path):
-            mesh_and_ptex_paths[selected_mesh] = ptex_path
-        else:
-            logging.warning(f"Ptex not found for {selected_mesh}. Assigning grey Lambert.")
-            create_grey_lambert_shader(selected_mesh)
+            if os.path.isdir(usd_scene):
+                usd_file = self.find_stage(usd_scene)
+                return usd_file
 
-    return mesh_and_ptex_paths
-
-
-def create_grey_lambert_shader(mesh_name):
-    """
-    Creates and assigns a grey Lambert shader in Maya.
-    """
-    shader_name = f"{mesh_name}_grey_lambert"
-    lambert_shader = cmds.shadingNode("lambert", name=shader_name, asShader=True)
-    shader_group = cmds.sets(name=f"{shader_name}SG", renderable=True, empty=True, noSurfaceShader=True)
-
-    cmds.connectAttr(f"{lambert_shader}.outColor", f"{shader_group}.surfaceShader")
-    cmds.setAttr(f"{lambert_shader}.color", 0.5, 0.5, 0.5, type="double3")
-    cmds.sets(mesh_name, forceElement=shader_group)
-
-
-def process_ptex_data(mesh_data):
-    """
-    Processes PTex data and assigns materials based on extracted colors.
-    """
-    rgb_values = {}
-
-    for mesh, ptex_path in mesh_data.items():
-        color_value = extract_ptex_color(ptex_path)
-        converted_color = convert_pixel_to_display_color(color_value)
-
-        if converted_color not in rgb_values:
-            rgb_values[converted_color] = [mesh]
-        else:
-            rgb_values[converted_color].append(mesh)
-
-    return rgb_values
+            if usd_scene.endswith(".usd") and os.path.exists(usd_scene):
+                return usd_scene
+            else:
+                print("❌ Please provide a valid .usd file path.")
+                sys.exit(1)
+        return ""
 
 
-def extract_ptex_color(ptex_path):
-    """
-    Simulates PTex color extraction. (Placeholder value for now).
-    """
-    return (0.8, 0.6, 0.4)  # Simulated solid color
+    def find_stage(self, usd_scene): 
+
+        for root, _, files in os.walk(usd_scene):
+            if "stage.usd" in files:
+                return os.path.join(root, "stage.usd")
+
+        print("Could not find a USD file")
+        return None
 
 
-def convert_pixel_to_display_color(pixel_value):
-    """
-    Converts a PTex pixel value to display color using gamma correction.
-    """
-    gamma = 2.2
-    return tuple(pow(channel / 255.0, gamma) for channel in pixel_value)
+    def save_usd_path(self):
+        path_file = f"/Users/{self.username}/Desktop/USD_Bridge/last_usd_path.txt"
+        with open(path_file, "w") as f:
+            f.write(self.usd_file)
 
+    def base_env(self):
+        os.environ["PYTHONPATH"] = f"/Users/{self.username}/Desktop/USD_Bridge/modules:" + os.environ.get("PYTHONPATH", "")
+        os.environ["USD_PLUGIN_PATH"] = f"/Users/{self.username}/Desktop/USD_Bridge/plugins"
 
-def create_lambert_shader(shader_name, rgb_values):
-    """
-    Creates and assigns Lambert shaders based on extracted PTex colors.
-    """
-    for rgb_tuple, meshes in rgb_values.items():
-        color_values = list(rgb_tuple)
-        cmds.select(meshes, r=True)
-
-        # Create Lambert Shader
-        lambert_shader = cmds.shadingNode("lambert", name=shader_name, asShader=True)
-        shader_group = cmds.sets(name=f"{shader_name}SG", renderable=True, empty=True, noSurfaceShader=True)
-
-        cmds.connectAttr(f"{lambert_shader}.outColor", f"{shader_group}.surfaceShader")
-        cmds.setAttr(f"{lambert_shader}.color", color_values[0], color_values[1], color_values[2], type="double3")
-        cmds.sets(meshes, forceElement=shader_group)
 
 #-----------------------        
 """
@@ -334,4 +320,3 @@ class app_tracker_ui(QtWidgets.QWidget):
         self.populate_ui()
         self.tracker.save_to_file()
         self.url_input.clear()
-
