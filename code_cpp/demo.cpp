@@ -171,3 +171,91 @@ void twoDArray::printArrays(){
             cout << endl; 
         }
     }
+
+// threaded_task_queue.cpp
+// Demonstrates multithreading and synchronization using std::thread, std::mutex, and std::condition_variable
+
+#include <iostream>
+#include <thread>
+#include <mutex>
+#include <queue>
+#include <condition_variable>
+#include <functional>
+#include <vector>
+#include <atomic>
+
+class TaskQueue {
+public:
+    void push(std::function<void()> task) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        tasks_.push(task);
+        cv_.notify_one();
+    }
+
+    void start(size_t threads = 2) {
+        running_ = true;
+        for (size_t i = 0; i < threads; ++i) {
+            workers_.emplace_back([this] { worker(); });
+        }
+    }
+
+    void stop() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            running_ = false;
+        }
+        cv_.notify_all();
+        for (auto& t : workers_) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
+    }
+
+    ~TaskQueue() {
+        stop();
+    }
+
+private:
+    void worker() {
+        while (true) {
+            std::function<void()> task;
+
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                cv_.wait(lock, [this] { return !tasks_.empty() || !running_; });
+
+                if (!running_ && tasks_.empty()) {
+                    return;
+                }
+
+                task = std::move(tasks_.front());
+                tasks_.pop();
+            }
+
+            task();
+        }
+    }
+
+    std::queue<std::function<void()>> tasks_;
+    std::vector<std::thread> workers_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    bool running_ = false;
+};
+
+int main() {
+    TaskQueue queue;
+    queue.start(4);
+
+    for (int i = 0; i < 10; ++i) {
+        queue.push([i]() {
+            std::cout << "Running task " << i << std::endl;
+        });
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    queue.stop();
+
+    return 0;
+}
