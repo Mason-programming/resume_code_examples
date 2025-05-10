@@ -101,6 +101,14 @@ public:
         userInputS = s;
         userInputT = t; 
     }
+
+    ~twoDArray(){ 
+
+        delete first_array; 
+        delete second_array; 
+        delete third_array; 
+        
+    }
     void createArray();
     void multiplyArray(); 
     void printArrays(); 
