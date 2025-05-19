@@ -4,6 +4,276 @@ While these projects cant paint a full example, I hope it can
 demonstrate my prefered approaches to scenarios within python.
 """
 
+//  StartCamera.h
+//  testCV
+//
+//  Created by Mason Kirby on 8/27/22.
+//
+
+#include <iostream>
+#include <opencv2/core.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/face.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/objdetect.hpp>
+#include <opencv2/imgproc.hpp>
+#include <vector>
+#include <unistd.h>
+#include <string>
+
+using namespace std;
+using namespace cv;
+using namespace cv::face;
+
+
+
+#ifndef StartCamera_h
+#define StartCamera_h
+
+CascadeClassifier faceDetect;
+string name;
+string fileName;
+int fileNumber;
+int numOfFiles = 0;
+
+
+void detectAndDisplay(Mat &frame){
+    
+    vector<Rect> faces;
+    Mat grey_frame;
+    Mat crop;
+    Mat res;
+    Mat grey;
+    string text;
+    stringstream sstm;
+    
+    cvtColor(frame, grey_frame, COLOR_BGR2GRAY);
+    equalizeHist(grey_frame, grey_frame);
+    
+    faceDetect.detectMultiScale(grey_frame, faces, 1.1, 2, 0 | CASCADE_SCALE_IMAGE, Size(30, 30));
+    
+    Rect roi_b;
+    Rect roi_c;
+    
+    size_t ic = 0;
+    int ac = 0;
+    
+    size_t ib = 0;
+    int ab = 0;
+    
+
+    for(int ic = 0; ic < faces.size(); ic++)
+        {
+              roi_c.x = faces[ic].x;
+              roi_c.y = faces[ic].y;
+              roi_c.width =  (faces[ic].width);
+              roi_c.height = (faces[ic].height);
+            
+            ac = roi_c.width * roi_c.height;
+            
+            roi_b.x = faces[ib].x;
+            roi_b.y = faces[ib].y;
+            roi_b.width =  (faces[ib].width);
+            roi_b.height = (faces[ib].height);
+
+
+//            rectangle(image, Point(x1, y1), Point(x2,y2), Scalar(50, 50, 255), 3);
+//
+//            putText(image, to_string(faces.size()), Point(10,40), FONT_HERSHEY_COMPLEX, 1, Scalar(255,255,255), 1);
+            
+            crop = frame(roi_b);
+            resize(crop, res, Size(128,128), 0, 0, INTER_LINEAR);
+            cvtColor(crop, grey, COLOR_BGR2GRAY);
+            stringstream ssfn;
+            fileName = "/Users/masonkirby/Desktop/Faces";
+            ssfn << fileName.c_str() << name << fileNumber << ".jpg";
+            fileName = ssfn.str();
+            imwrite(fileName, res);
+            fileNumber++;
+            
+        }
+}
+
+// Start a camera and add photos of the face to a folder to be retrieved later
+// retrieve photos inorder to train the model 
+void addFace(){
+    
+    cout << "enter your name" << endl;
+    cin >> name;
+    VideoCapture cap(0);
+    
+    if(!faceDetect.load("/Users/masonkirby/Desktop/face.xml")){
+        cout << "Error" << endl;
+        return;
+    }
+    
+    Mat frame;
+    cout << "Capturing your face 10 times, press c 10 times keeping you facec in front of the camera" << endl;
+    
+    char key;
+    int i = 0;
+    
+    for(;;){
+        
+        cap >> frame;
+        imshow("Frame", frame); 
+        detectAndDisplay(frame);
+        i++;
+        if(i == 10){
+            cout << "Face added!" << endl;
+            break;
+        }
+        
+        waitKey(1000);
+       
+    }
+    
+    return;
+}
+
+// dbread is Data base read. It is how the photos are going to populate the vectors
+//
+static void dbread(vector<Mat>& images, vector<int>& labels){
+    vector<cv::String> fn;
+    fileName = "/Users/masonkirby/Desktop/Faces2/";
+    
+    glob(fileName, fn, false);
+    
+    size_t count = fn.size();
+    
+    string itsname = "";
+    char sep;
+    
+    for(size_t i = 0; i < count; i++){
+        itsname ="";
+        sep = '\\';
+        size_t j = fn[i].rfind(sep, fn[i].length());
+        if(j != string::npos)
+        {
+            itsname=(fn[i].substr(j+1, fn[i].length() - j-6));
+        }
+        images.push_back(imread(fn[i],0));
+        labels.push_back(atoi(itsname.c_str()));
+    }
+    
+}
+
+// place the vector of photos inside of the machine learning alogrithm named EigenFaceRecognizer.train
+void eigenFaceTrainer(){
+    vector<Mat> images;
+    vector<int> labels;
+    dbread(images, labels);
+    
+    Ptr<EigenFaceRecognizer> model = EigenFaceRecognizer::create();
+    
+    model->train(images, labels);
+    
+    model->save("/Users/masonkirby/Desktop/Faces2/eigenFace.yml");
+    
+    cout << "Tarining Complete" << endl;
+    waitKey(10000);
+}
+
+void faceRecognizer(){
+    Ptr<EigenFaceRecognizer> model = EigenFaceRecognizer::create();
+    
+    model->read("/Users/masonkirby/Desktop/Faces2/eigenFace.yml");
+    
+    Mat testSample = imread("/Users/masonkirby/Desktop/Faces2/FACESMason0.jpg",0);
+    
+    int img_width = testSample.cols;
+    int img_height = testSample.rows;
+    
+    string windows = "Capture - face detection";
+    
+    if(!faceDetect.load("/Users/masonkirby/Desktop/face.xml")){
+        cout << "Error" << endl;
+        return;
+    }
+    
+    VideoCapture cap(0);
+    
+    if(!cap.isOpened()){
+        cout << "exit" << endl;
+        return;
+    }
+    namedWindow(windows, 1);
+    long count = 0;
+    string Pname = "";
+    
+    while(true)
+    {
+        vector<Rect> faces;
+        Mat frame, crop;
+        Mat grayScaleFrame;
+        Mat Original;
+        string name;
+        
+        cap >> frame;
+        
+        // count frames
+        count = count + 1;
+        
+        if(!frame.empty())
+        {
+            //clone from original frame
+            Original = frame.clone();
+            
+            // convert image to gray scale and equalize
+            cvtColor(Original, grayScaleFrame, COLOR_BGR2GRAY);
+            
+            
+            // detect face in gray images
+            faceDetect.detectMultiScale(grayScaleFrame, faces, 1.1, 3, 0, cv::Size(70,70));
+            
+            //number of faces in gray image
+            string fameset = to_string(count);
+            string faceset = to_string(faces.size());
+            
+            int width, height = 0;
+            
+            for(int i = 0; i < faces.size(); i++)
+            {
+                Rect face_i = faces[i];
+                
+                Mat face = grayScaleFrame(face_i);
+                
+                Mat face_resized;
+                
+                resize(face, face_resized, Size(img_width, img_height), 1.0, 1.0, INTER_CUBIC);
+                
+                int label = -1; double confidence = 0;
+                
+                model->predict(face_resized, label, confidence);
+                
+                cout << "Confidence: " << confidence << " Label " << label << endl;
+                
+                Pname = to_string(label);
+                
+                rectangle(Original, face_i, CV_RGB(0, 255, 0), 1);
+                
+                name = "Mason";
+                
+                int pos_x = max(face_i.tl().x - 10, 0);
+                int pos_y = max(face_i.tl().y - 10, 0);
+                
+                // name the person who is in the image
+                putText(Original, name, Point(pos_x,pos_y), FONT_HERSHEY_COMPLEX_SMALL, 1.0, CV_RGB(0,255, 0), 1.0);
+                
+            }
+            imshow(windows, Original);
+            
+        }
+        if(waitKey(30) >= 0) break;
+        
+    }
+    
+}
+
+#endif /* StartCamera_h */
+
+
 // Base class for rendering objects
 class Renderable {
 public:
@@ -107,7 +377,7 @@ public:
         delete first_array; 
         delete second_array; 
         delete third_array; 
-        
+
     }
     void createArray();
     void multiplyArray(); 
